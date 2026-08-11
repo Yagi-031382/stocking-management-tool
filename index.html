@@ -7,156 +7,202 @@
     <style>
         :root { --font-scale: 1; }
         body { font-family: sans-serif; padding: 20px; font-size: calc(18px * var(--font-scale)); touch-action: manipulation; }
-        .top-menu { margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
-        .mode-btn { padding: 15px; font-size: 20px; cursor: pointer; }
-        .active-mode { background: #333; color: white; }
-        .search-box { margin: 20px 0; display: flex; gap: 5px; }
-        .download-btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; }
-        .edit-btn { background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-size: 16px; }
-        .product-card { display: flex; flex-direction: column; align-items: flex-start; border-bottom: 2px solid #ccc; padding: 15px 0; }
+        .top-menu { margin-bottom: 20px; }
+        .download-btn { display: inline-block; padding: 15px 25px; background: #007bff; color: white; text-decoration: none; font-size: calc(18px * var(--font-scale)); border-radius: 5px; margin-bottom: 10px; }
+        .file-input { margin-bottom: 20px; padding: 10px; background: #f0f0f0; }
+        .sheet-controls { margin-bottom: 20px; padding: 15px; background: #eef6ff; border-radius: 5px; }
+        .sheet-controls button { margin: 5px 5px 5px 0; }
+        .status { margin-top: 8px; font-size: calc(16px * var(--font-scale)); }
+        .product-card { display: flex; flex-direction: column; /* 縦並びに変更 */align-items: flex-start; /* 左寄せ */border-bottom: 2px solid #ccc; padding: 15px 0; }
         .product-info { font-size: calc(20px * var(--font-scale)); font-weight: bold; }
-        .controls { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-        button { padding: 15px 25px; font-size: calc(20px * var(--font-scale)); cursor: pointer; }
-        .count-input { font-size: calc(24px * var(--font-scale)); width: 60px; text-align: center; }
-        .reset-btn { background: #ff4444; color: white; width: 100%; padding: 15px; border: none; margin-top: 20px; }
+        .controls { display: flex; align-items: center; gap: 10px; margin-top: 10px; /* 商品名との隙間 */}
+        button { padding: 15px 25px; font-size: calc(20px * var(--font-scale)); cursor: pointer; touch-action: manipulation; }
+        .count-input { font-size: calc(24px * var(--font-scale)); font-weight: bold; width: calc(60px * var(--font-scale)); text-align: center; border: 1px solid #999; padding: 5px; }
+        .reset-btn { background: #ff4444; color: white; width: 100%; padding: 20px; font-size: calc(20px * var(--font-scale)); border: none; margin-top: 20px; }
+        .font-controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        #newProductName { width: 60%; border: 1px solid #ccc; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-<h1>品出し管理ツール(8/11更新)</h1>
-
-<div id="mode-selector">
-    <button id="btn-beverage" class="mode-btn active-mode" onclick="setMode('beverage')">飲料モード</button>
-    <button id="btn-alcohol" class="mode-btn" onclick="setMode('alcohol')">酒モード</button>
+<h1>品出し補充リスト管理ツール</h1>
+<div class="version-info">6/15更新</div>
+<br>
+<div class="top-menu">
+    <a href="https://docs.google.com/spreadsheets/d/1Vp6SGHcbn-bjvlTrsVJjfhKSLOToyZaCEMABVIoXBm8/edit?usp=sharing" class="action-btn edit-btn" target="_blank" rel="noopener noreferrer">飲料リストを編集</a>
+    <a href="https://docs.google.com/spreadsheets/d/1OF8sG01LuwRwwxzsJibkrZY1uwJruYqSPkVr2PzAhAE/edit?usp=sharing" class="action-btn edit-btn" target="_blank" rel="noopener noreferrer">酒リストを編集</a>
 </div>
 
-<div class="search-box">
-    <input type="text" id="searchInput" placeholder="商品名検索" style="padding:10px; width:70%;">
-    <button onclick="searchProduct()">検索</button>
+<div class="sheet-controls">
+    <div><strong>Googleスプレッドシートから商品リストを取得:</strong></div>
+    <button onclick="loadSheet('drink')">飲料リストを読み込む</button>
+    <button onclick="loadSheet('alcohol')">酒リストを読み込む</button>
+    <button onclick="reloadCurrentSheet()">現在のリストを再読み込み</button>
+    <div id="loadStatus" class="status"></div>
 </div>
 
-<div class="top-menu" id="menu-area"></div>
+<div class="font-controls">
+    <span>文字サイズ変更:</span>
+    <button onclick="changeFontSize(-0.1)">小</button>
+    <button onclick="changeFontSize(0.1)">大</button>
+</div>
 
 <div class="file-input">
-    CSV選択: <input type="file" id="csvFile" accept=".csv">
+    商品リストを選択(.csvファイルを選択)：<input type="file" id="csvFile" accept=".csv">
 </div>
-<button class="reset-btn" onclick="resetCounts()">このモードを全リセット</button>
+<button class="reset-btn" onclick="resetCounts()">補充数をリセット</button>
 <div id="list"></div>
 
 <script>
-    let currentMode = 'beverage';
+    const SHEETS = {
+        drink: 'https://docs.google.com/spreadsheets/d/1Vp6SGHcbn-bjvlTrsVJjfhKSLOToyZaCEMABVIoXBm8/gviz/tq?tqx=out:csv',
+        alcohol: 'https://docs.google.com/spreadsheets/d/1OF8sG01LuwRwwxzsJibkrZY1uwJruYqSPkVr2PzAhAE/gviz/tq?tqx=out:csv'
+    };
+
     let fontScale = parseFloat(localStorage.getItem('fontScale') || '1.0');
     document.documentElement.style.setProperty('--font-scale', fontScale);
 
-    function setMode(mode) {
-        currentMode = mode;
-        document.getElementById('btn-beverage').className = mode === 'beverage' ? 'mode-btn active-mode' : 'mode-btn';
-        document.getElementById('btn-alcohol').className = mode === 'alcohol' ? 'mode-btn active-mode' : 'mode-btn';
-        updateMenu();
+    function changeFontSize(delta) {
+        fontScale = Math.min(Math.max(0.7, fontScale + delta), 2.0);
+        localStorage.setItem('fontScale', fontScale);
+        document.documentElement.style.setProperty('--font-scale', fontScale);
         render();
     }
 
-    function updateMenu() {
-        const menu = document.getElementById('menu-area');
-        const urls = currentMode === 'beverage' 
-            ? { dl: "https://docs.google.com/spreadsheets/d/1Vp6SGHcbn-bjvlTrsVJjfhKSLOToyZaCEMABVIoXBm8/gviz/tq?tqx=out:csv", ed: "https://docs.google.com/spreadsheets/d/1Vp6SGHcbn-bjvlTrsVJjfhKSLOToyZaCEMABVIoXBm8/edit" }
-            : { dl: "https://docs.google.com/spreadsheets/d/1OF8sG01LuwRwwxzsJibkrZY1uwJruYqSPkVr2PzAhAE/gviz/tq?tqx=out:csv", ed: "https://docs.google.com/spreadsheets/d/1OF8sG01LuwRwwxzsJibkrZY1uwJruYqSPkVr2PzAhAE/edit" };
-        menu.innerHTML = `<a href="${urls.dl}" class="download-btn" download>リストをダウンロード</a><a href="${urls.ed}" class="edit-btn" target="_blank">リストを編集</a>`;
-    }
-
-    function searchProduct() {
-        const query = document.getElementById('searchInput').value.trim();
-        const cards = document.querySelectorAll('.product-info');
-        for (let card of cards) {
-            if (card.innerText.includes(query)) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                break;
-            }
-        }
-    }
-
+    // render関数を以下のように修正・拡張する
     function render() {
-        const stored = localStorage.getItem('products_' + currentMode);
+        const stored = localStorage.getItem('products');
         const products = stored ? JSON.parse(stored) : [];
         const listDiv = document.getElementById('list');
         listDiv.innerHTML = '';
         
+        // 商品カードの描画
         products.forEach((p, index) => {
+            const productNameFormatted = p.name.replace(/ /g, '<br>').replace(/ /g, '<br>');
             const card = document.createElement('div');
             card.className = 'product-card';
             card.innerHTML = `
-                <div class="product-info">${p.name.replace(/ /g, '<br>').replace(/ /g, '<br>')}</div>
+                <div class="product-info">${productNameFormatted}</div>
                 <div class="controls">
-                    <button onclick="updateCount(${index}, -1)">-</button>
-                    <input type="number" value="${p.count || 0}" onchange="setManualCount(${index}, this.value)" class="count-input">
-                    <button onclick="updateCount(${index}, 1)">+</button>
-                    <button onclick="resetSingleCount(${index})" style="background:#ffcccc;">0</button>
+                    <button id="minus-${index}">-</button>
+                    <input type="number" id="input-${index}" class="count-input" value="${p.count || 0}" min="0">
+                    <button id="plus-${index}">+</button>
+                    <button id="reset-${index}" style="background:#ffcccc;">0</button>
                 </div>
             `;
             listDiv.appendChild(card);
+
+            document.getElementById(`minus-${index}`).onclick = () => updateCount(index, -1);
+            document.getElementById(`plus-${index}`).onclick = () => updateCount(index, 1);
+            document.getElementById(`input-${index}`).onchange = (e) => setManualCount(index, e.target.value);
+            document.getElementById(`reset-${index}`).onclick = () => resetSingleCount(index);
         });
 
-        listDiv.innerHTML += `
-            <div style="margin-top:30px;">
-                <input type="text" id="newProductName" placeholder="商品名">
-                <button onclick="addProduct()">追加</button>
-            </div>
+        // 動的追加エリアの描画
+        const addDiv = document.createElement('div');
+        addDiv.style.marginTop = "30px";
+        addDiv.innerHTML = `
+            <div style="font-weight:bold; margin-bottom:5px;">商品を追加:</div>
+            <input type="text" id="newProductName" placeholder="商品名を入力" style="font-size:18px; padding:10px;">
+            <button onclick="addProduct()">追加</button>
         `;
+        listDiv.appendChild(addDiv);
     }
 
+    // 商品追加関数
     function addProduct() {
         const nameInput = document.getElementById('newProductName');
         if (!nameInput.value.trim()) return;
-        let products = JSON.parse(localStorage.getItem('products_' + currentMode) || '[]');
+        
+        let products = JSON.parse(localStorage.getItem('products') || '[]');
         products.push({ name: nameInput.value.trim(), count: 0 });
-        localStorage.setItem('products_' + currentMode, JSON.stringify(products));
+        localStorage.setItem('products', JSON.stringify(products));
         render();
     }
 
+    function csvToProducts(csv, oldProducts = []) {
+        const oldCounts = new Map(oldProducts.map(p => [p.name, parseInt(p.count) || 0]));
+        return csv.split(/\r?\n/)
+            .map(row => row.trim())
+            .filter(row => row !== '')
+            .map(row => {
+                const name = row.replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+                return { name, count: oldCounts.get(name) || 0 };
+            });
+    }
+
+    async function loadSheet(type) {
+        const status = document.getElementById('loadStatus');
+        status.textContent = '読み込み中...';
+        try {
+            const response = await fetch(SHEETS[type], { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const csv = await response.text();
+            const oldProducts = JSON.parse(localStorage.getItem('products') || '[]');
+            const products = csvToProducts(csv, oldProducts);
+            localStorage.setItem('products', JSON.stringify(products));
+            localStorage.setItem('currentSheet', type);
+            render();
+            status.textContent = `${type === 'drink' ? '飲料' : '酒'}リストを更新しました（${products.length}件）`;
+        } catch (error) {
+            console.error(error);
+            status.textContent = 'リストの取得に失敗しました。通信状態やスプレッドシートの公開設定を確認してください。';
+        }
+    }
+
+    function reloadCurrentSheet() {
+        const type = localStorage.getItem('currentSheet');
+        if (!type || !SHEETS[type]) {
+            document.getElementById('loadStatus').textContent = '先に「飲料」または「酒」リストを読み込んでください。';
+            return;
+        }
+        loadSheet(type);
+    }
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const oldProducts = JSON.parse(localStorage.getItem('products') || '[]');
+            const products = csvToProducts(e.target.result, oldProducts);
+            localStorage.setItem('products', JSON.stringify(products));
+            localStorage.removeItem('currentSheet');
+            document.getElementById('loadStatus').textContent = `ローカルCSVを読み込みました（${products.length}件）`;
+            render();
+        };
+        reader.readAsText(file, 'UTF-8');
+    });
+
     function updateCount(index, delta) {
-        let products = JSON.parse(localStorage.getItem('products_' + currentMode));
+        let products = JSON.parse(localStorage.getItem('products'));
         products[index].count = Math.max(0, (parseInt(products[index].count) || 0) + delta);
-        localStorage.setItem('products_' + currentMode, JSON.stringify(products));
+        localStorage.setItem('products', JSON.stringify(products));
         render();
     }
 
     function setManualCount(index, value) {
-        let products = JSON.parse(localStorage.getItem('products_' + currentMode));
+        let products = JSON.parse(localStorage.getItem('products'));
         products[index].count = Math.max(0, parseInt(value) || 0);
-        localStorage.setItem('products_' + currentMode, JSON.stringify(products));
-        render();
-    }
-
-    function resetSingleCount(index) {
-        let products = JSON.parse(localStorage.getItem('products_' + currentMode));
-        products[index].count = 0;
-        localStorage.setItem('products_' + currentMode, JSON.stringify(products));
+        localStorage.setItem('products', JSON.stringify(products));
         render();
     }
 
     function resetCounts() {
-    // if (!confirm("現在のリストの補充数をすべて 0 にリセットしますか？\n（商品リスト自体は消えません）")) return;
-    let products = JSON.parse(localStorage.getItem('products_' + currentMode) || '[]');
-    products.forEach(p => {
-        p.count = 0;
-    });
-    
-    localStorage.setItem('products_' + currentMode, JSON.stringify(products));
+        let products = JSON.parse(localStorage.getItem('products'));
+        if (!products) return;
+        products.forEach(p => p.count = 0);
+        localStorage.setItem('products', JSON.stringify(products));
+        render();
+    }
+
+    // 個別リセット処理
+    function resetSingleCount(index) {
+        let products = JSON.parse(localStorage.getItem('products'));
+        products[index].count = 0;
+        localStorage.setItem('products', JSON.stringify(products));
+        render();
+    }
     render();
-}
-
-    document.getElementById('csvFile').addEventListener('change', function(e) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const products = e.target.result.split('\n').filter(r => r.trim() !== '').map(n => ({ name: n.trim().replace(/"/g, ''), count: 0 }));
-            localStorage.setItem('products_' + currentMode, JSON.stringify(products));
-            render();
-        };
-        reader.readAsText(e.target.files[0], 'UTF-8');
-    });
-
-    // 初期化
-    setMode('beverage');
 </script>
 </body>
 </html>
