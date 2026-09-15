@@ -186,15 +186,15 @@
 
 <script>
     const SHEETS = {
-        drink: {
-            label: '飲料',
-            csvUrl: './drink.csv'
-        },
-        alcohol: {
-            label: '酒',
-            csvUrl: './alcohol.csv'
-        }
-    };
+    drink: {
+        label: '飲料',
+        csvUrl: 'https://docs.google.com/spreadsheets/d/1Vp6SGHcbn-bjvlTrsVJjfhKSLOToyZaCEMABVIoXBm8/gviz/tq?tqx=out:csv'
+    },
+    alcohol: {
+        label: '酒',
+        csvUrl: 'https://docs.google.com/spreadsheets/d/1OF8sG01LuwRwwxzsJibkrZY1uwJruYqSPkVr2PzAhAE/gviz/tq?tqx=out:csv'
+    }
+};
 
     let currentMode = localStorage.getItem('currentMode') || 'drink';
 
