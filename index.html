@@ -14,6 +14,30 @@
             touch-action: manipulation;
         }
 
+        .search-bar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            background: white;
+            border-bottom: 2px solid #777;
+        }
+        .search-bar input {
+            flex: 1;
+            min-width: 100px;
+            width: 100px;
+            padding: 10px;
+            font: inherit;
+        }
+        .search-bar button { padding: 10px 14px; }
+        .search-result { flex-basis: 100%; }
+        .product-card.search-match { background: #fff9d9; }
+        .product-card.search-current { outline: 3px solid #007bff; outline-offset: -3px; }
+
         .version-info { margin-bottom: 15px; }
 
         .mode-controls,
@@ -161,6 +185,14 @@
 </head>
 <body>
 
+<form class="search-bar" id="searchForm" role="search">
+    <input id="searchInput" type="search" aria-label="商品名を検索" placeholder="商品名を入力">
+    <button type="submit">検索</button>
+    <button type="button" id="previousMatch" aria-label="前の検索結果" onclick="moveSearch(-1)" disabled>↑</button>
+    <button type="button" id="nextMatch" aria-label="次の検索結果" onclick="moveSearch(1)" disabled>↓</button>
+    <span id="searchResult" class="search-result" role="status" aria-live="polite"></span>
+</form>
+
 <h1>品出し管理ツール</h1>
 
 <div class="mode-controls">
@@ -204,6 +236,10 @@
     }
     
     };
+
+    let searchKeyword = '';
+    let searchMatches = [];
+    let searchPosition = -1;
 
     let currentMode = localStorage.getItem('currentMode') || 'drink';
 
@@ -357,6 +393,7 @@
         products.forEach((p, index) => {
             const card = document.createElement('div');
             card.className = 'product-card';
+            card.id = `product-${index}`;
 
             const info = document.createElement('div');
             info.className = 'product-info';
@@ -439,6 +476,7 @@
 
         addDiv.append(title, input, button);
         listDiv.appendChild(addDiv);
+        refreshSearch();
     }
 
     function addProduct() {
@@ -534,29 +572,68 @@
         render();
     }
 
+    function refreshSearch() {
+        const previousIndex = searchMatches[searchPosition];
+        searchMatches = [];
+        getProducts().forEach((product, index) => {
+            if (searchKeyword && String(product.name).toLowerCase().includes(searchKeyword)) {
+                searchMatches.push(index);
+            }
+        });
+        searchPosition = searchMatches.indexOf(previousIndex);
+        if (searchPosition < 0 && searchMatches.length) searchPosition = 0;
+        updateSearchUI();
+    }
+
+    function updateSearchUI() {
+        document.querySelectorAll('.product-card').forEach(card => {
+            card.classList.remove('search-match', 'search-current');
+        });
+        searchMatches.forEach((index, position) => {
+            const card = document.getElementById(`product-${index}`);
+            if (card) {
+                card.classList.add('search-match');
+                card.classList.toggle('search-current', position === searchPosition);
+            }
+        });
+        document.getElementById('previousMatch').disabled = searchMatches.length === 0;
+        document.getElementById('nextMatch').disabled = searchMatches.length === 0;
+        document.getElementById('searchResult').textContent = !searchKeyword ? '' :
+            searchMatches.length ? `${searchPosition + 1} / ${searchMatches.length} 件` :
+            '一致する商品が見つかりません';
+    }
+
+    function scrollToSearchMatch() {
+        const card = document.getElementById(`product-${searchMatches[searchPosition]}`);
+        if (!card) return;
+        const bar = document.getElementById('searchForm');
+        const top = window.scrollY + card.getBoundingClientRect().top - bar.offsetHeight - 12;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+
     function searchProduct() {
-    const keyword = document.getElementById('searchInput').value.trim();
-    if (!keyword) return;
-
-    const products = getProducts();
-
-    const index = products.findIndex(product =>
-        product.name.toLowerCase().includes(keyword.toLowerCase())
-    );
-
-    if (index === -1) {
-        setStatus(`「${keyword}」に一致する商品が見つからなかった。`, true);
-        return;
+        searchKeyword = document.getElementById('searchInput').value.trim().toLowerCase();
+        searchMatches = [];
+        searchPosition = -1;
+        refreshSearch();
+        scrollToSearchMatch();
     }
 
-    const card = document.getElementById(`product-${index}`);
+    function moveSearch(direction) {
+        if (!searchMatches.length) return;
+        searchPosition = (searchPosition + direction + searchMatches.length) % searchMatches.length;
+        updateSearchUI();
+        scrollToSearchMatch();
+    }
 
-    card.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
+    document.getElementById('searchForm').addEventListener('submit', event => {
+        event.preventDefault();
+        searchProduct();
     });
-    
-    }
+    document.getElementById('searchInput').addEventListener('input', () => {
+        searchKeyword = '';
+        refreshSearch();
+    });
 
     // 旧版で products に保存されていたデータがある場合は、
     // 初回のみ飲料モードへ引き継ぐ。
