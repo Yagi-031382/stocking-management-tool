@@ -103,6 +103,14 @@
             flex-wrap: wrap;
         }
 
+        .counter-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .count-total { font-weight: bold; }
+
         .count-input {
             font-size: calc(24px * var(--font-scale));
             font-weight: bold;
@@ -290,13 +298,14 @@
 
         existing.forEach(product => {
             if (!counts.has(product.name)) {
-                counts.set(product.name, product.count || 0);
+                counts.set(product.name, product);
             }
         });
 
         return names.map(name => ({
             name,
-            count: counts.get(name) || 0
+            count: counts.get(name)?.count || 0,
+            packCount: counts.get(name)?.packCount || 0
         }));
     }
 
@@ -362,27 +371,48 @@
             const controls = document.createElement('div');
             controls.className = 'controls';
 
-            const minus = document.createElement('button');
-            minus.textContent = '-';
-            minus.onclick = () => updateCount(index, -1);
+            function createCounter(field, unit) {
+                const group = document.createElement('span');
+                group.className = 'counter-group';
+                const label = document.createElement('span');
+                label.textContent = `${unit} ×`;
 
-            const input = document.createElement('input');
-            input.type = 'number';
-            input.className = 'count-input';
-            input.value = p.count || 0;
-            input.min = '0';
-            input.onchange = e => setManualCount(index, e.target.value);
+                const minus = document.createElement('button');
+                minus.textContent = '-';
+                minus.setAttribute('aria-label', `${unit}個単位を減らす`);
+                minus.onclick = () => updateCount(index, -1, field);
 
-            const plus = document.createElement('button');
-            plus.textContent = '+';
-            plus.onclick = () => updateCount(index, 1);
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'count-input';
+                input.value = p[field] || 0;
+                input.min = '0';
+                input.step = '1';
+                input.setAttribute('aria-label', `${unit}個単位のカウント`);
+                input.onchange = e => setManualCount(index, e.target.value, field);
+
+                const plus = document.createElement('button');
+                plus.textContent = '+';
+                plus.setAttribute('aria-label', `${unit}個単位を増やす`);
+                plus.onclick = () => updateCount(index, 1, field);
+                group.append(label, minus, input, plus);
+                return group;
+            }
+
+            const separator = document.createElement('span');
+            separator.textContent = '+';
+            const total = document.createElement('span');
+            total.className = 'count-total';
+            total.textContent = `合計 ${(p.count || 0) + 6 * (p.packCount || 0)} 個`;
 
             const reset = document.createElement('button');
             reset.textContent = '0';
+            reset.setAttribute('aria-label', 'この商品のカウントをリセット');
             reset.style.background = '#ffcccc';
             reset.onclick = () => resetSingleCount(index);
 
-            controls.append(minus, input, plus, reset);
+            controls.append(createCounter('count', 1), separator,
+                createCounter('packCount', 6), total, reset);
             card.append(info, controls);
             listDiv.appendChild(card);
         });
@@ -418,7 +448,7 @@
         if (!name) return;
 
         const products = getProducts();
-        products.push({ name, count: 0 });
+        products.push({ name, count: 0, packCount: 0 });
         saveProducts(products);
         render();
     }
@@ -439,11 +469,12 @@
             }
 
             const existing = getProducts(modeAtSelection);
-            const counts = new Map(existing.map(p => [p.name, p.count || 0]));
+            const counts = new Map(existing.map(p => [p.name, p]));
 
             const products = names.map(name => ({
                 name,
-                count: counts.get(name) || 0
+                count: counts.get(name)?.count || 0,
+                packCount: counts.get(name)?.packCount || 0
             }));
 
             saveProducts(products, modeAtSelection);
@@ -466,29 +497,29 @@
         reader.readAsText(file, 'UTF-8');
     });
 
-    function updateCount(index, delta) {
+    function updateCount(index, delta, field = 'count') {
         const products = getProducts();
         if (!products[index]) return;
 
-        products[index].count =
-            Math.max(0, (parseInt(products[index].count, 10) || 0) + delta);
+        products[index][field] =
+            Math.max(0, (parseInt(products[index][field], 10) || 0) + delta);
 
         saveProducts(products);
         render();
     }
 
-    function setManualCount(index, value) {
+    function setManualCount(index, value, field = 'count') {
         const products = getProducts();
         if (!products[index]) return;
 
-        products[index].count = Math.max(0, parseInt(value, 10) || 0);
+        products[index][field] = Math.max(0, parseInt(value, 10) || 0);
         saveProducts(products);
         render();
     }
 
     function resetCounts() {
         const products = getProducts();
-        products.forEach(p => p.count = 0);
+        products.forEach(p => { p.count = 0; p.packCount = 0; });
         saveProducts(products);
         render();
     }
@@ -498,6 +529,7 @@
         if (!products[index]) return;
 
         products[index].count = 0;
+        products[index].packCount = 0;
         saveProducts(products);
         render();
     }
